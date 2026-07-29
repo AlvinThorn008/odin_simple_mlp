@@ -1,0 +1,294 @@
+
+
+
+
+
+                    ->
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8 |
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8 v
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+                    1 2 3 4 5 6 7 8            1 2 3 4 5 6 7 8
+
+
+0 3 4
+1 2 3  4x3
+4 5 6
+7 8 9
+
+0 1 4 7
+3 2 5 8   4x3
+4 3 6 9
+
+
+
+Cache line: 64 bytes
+f64: 8 bytes
+so 8 elements per cache line
+
+
+Calculate 
+
+C(0, 0) needs 9 memory accesses, all non-cached
+
+9 + 8 = 17 cache misses
+
+1920
+
+
+A B
+
+
+num_vecs = A.cols >> 3
+num_elems = num_vecs << 3
+rem = A.cols & 8
+
+
+a, b: []vec256
+
+for r in 0..(A.rows)
+    for c in 0..(B.cols)
+        a_row, b_col: []vec256
+        a_row = A.data[r * A.cols:][:num_elems]
+        b_col = B.data[c * B.rows:][:num_elems]
+
+        vec256 acc
+        final1: [8]f32
+        final2: [8]f32
+        for n in 0..num_vecs
+            acc += a[n] * b[n]
+        
+        for i in num_elems..(num_elems + rem)
+            C(r, c) += A.data[r * A.cols + i] + B.data[c * B.rols + i]
+
+
+
+
+b <<= 1
+
+
+11101
+
+0 & 1 = 0
+01 & 1 = 1
+01 & 10 = 0
+
+1 - 1
+x1 + x2
+
+v += 
+
+1
+10
+100
+
+3
+
+1
+1
+
+100
+
+
+
+11 
+01
+
+11
+10
+
+011
+100
+
+[3 4 5 7]
+
+stack: []
+p = 0
+v 
+
+> i = 0
+stack: [3]
+p = 1
+
+> i = 1
+v = 4 + stack[0]
+stack: [-
+
+stack[64], v, p = 0
+
+for i in 0..n:
+    v = x[i]
+    ord = i + 1
+
+    loop num_reductions
+
+[x] v 
+
+2
+
+[1 2 3 4]
+
+[1] 2
+[3]
+
+[3] 3
+[3 3]
+
+Trailing zeros:
+0 -> shift | stack
+1 -> shift | reduce last element | stack
+2 -> shift | reduce last 2 elements | stack
+
+
+0011
+
+a b c d
+e f g h
+
+i j k l
+m n o p
+
+vsum {}
+a1 a2 a3 a4 a1 a2 a3 a4
+
+o1 o2 o1 o2 o1 o2 o1 o2
+
+b1 b2 b3 b4 b5 b6 b7 b8
+
+a1 a2 a1 a2 a3 a4 a3 a4
+
+o1 o1 o1 o1 o2 o2 o2 o2
+
+// OR nc = b_cols & ~15 
+nc = (b_cols - 15) / 16 * 16
+nc_rem = b_cols & 15
+
+nr = (a_cols - 5) / 6 * 6
+nr_rem = a_cols - nr
+
+row, col: uint
+
+for row = 0; row < nr; row += 6 {
+    for col = 0; col < nc; col += 16 { 
+        kernel(a, b, c, row, col, 0, nc, a_cols, b_cols)
+    }
+    if nc_rem {
+        kernel_6x16_masked(a, b, c, row, col, 0, nc, a_cols, b_cols, nc_rem)
+    }
+}
+
+if nr_rem {
+    for col = 0; col < nc; col += 16 { 
+        kernel_Nx16(a, b, c, row, col, 0, nc, a_cols, b_cols, nr_rem)
+    }
+    if nc_rem {
+        kernel_Nx16_masked(a, b, c, row, col, 0, nc, a_cols, b_cols, nc_rem, nr_rem)
+    }
+}
+
+kernel_Nx16 can be specialized for each N(1 to 6) but I think some care must be taken to ensure
+the fma ports are still fully utilized
+
+Consider the case kernel_2x16:
+If N is simply set to 2 in that inner loop then we'll have 4 independent fma operations in flight. In order
+to approach 100% utilization, the outer loop k in [l, r) should be unrolled in steps of (12 / 4 = )3. 
+
+We can do this for cases N=1 to 3, beyond which our model predicts ~80% and ~100% utilization at N=4 and N=5 when using
+the more generic specialized(inner loop N set to nr_rem)
+
+
+[Kernels]
+C:/Users/Dubem/Documents/odin/neural_net/src/mat/kernel.odin(80:35) Index 3651922 is out of range 0..<3651921
+make: *** [Makefile:17: run] Error -1073741684
+
+We are indexing out of bounds BUT technically speaking, we don't actually access the elements
+out of bounds
+
+Cache blocking implementation
+
+## Rough overview
+- Divide C into 6a x 6b sub matrices, denote each one as a C_unit
+- To compute a C_unit, we need the sub matrices of A and B with sizes, 6a x P and P x 16b
+  where P is the common dimension of matrices A and B. Call these sub matrices A_unit and B_unit
+- Instead of computing C_unit completely, it is done partially with 6a x Q sub matrices of A_unit and Q x 16b sub matrices
+  of B_unit
+
+I think this version is clearer as it takes into account our kernel size. Computing a C_unit is only requires the fixed kernel(which is the fastest one).
+
+Factorizing in the cache sizes:
+
+P x 16b floats < L3 cache | s3 = 16b
+6a x P floats  ~ L2 cache | s2 = 6a
+Q x 16b floats ~ L1 cache | s1 = Q
+
+I do want the sizes we pick to be constant but we can't do that right now because P varies with the input. However, 
+
+If I want my all steps to be constant, I need to fix P to say a reasonable maximum value. For smaller P, it's fine especially if I also limit P to a minimum value so my constants let the sub divisions fit their associated cache with a sensible variance. (I could let the non-blocked version handle smaller matrices)
+For larger P though, fixed step sizes, the sub divisions could easily exceed their cache size. I guess this is technically fine as with dynamic sizes, for large P, we would end up with s3=16,s2=6
+
+6xP and Px16
+
+b_col_end = nc if nc % s3 == 0 
+
+n * s3 == nc
+n * s3 > nc
+
+s3, s2, s1
+
+for i3 := 0; i3 < nc; i3 += s3 {
+    // B[i3:i3+s3] and maybe finally B[i3:nc]
+    b_col_end := min(i3 + s3, nc)
+
+    for i2 := 0; i2 < nr; i2 += s2 {
+        a_col_end := min(i2 + s2, nr)
+
+        for i1 := 0; i1 < a.cols; i1 += s1 {
+            l := i1
+            r := min(i1 + s1, a.cols)
+
+            for row := i2; row < a_col_end; row += 6 {
+                for col := i3; col < b_col_end; col += 16 { 
+                    kernel(a, b, c, row, col, l, r, a_cols, b_cols)
+                }
+                if nc_rem > 0 && b_col_end == nc {
+                    kernel_6x16_mas ked(a, b, c, row, col, l, r, a_cols, b_cols, nc_rem)
+                }
+            }
+
+            if nr_rem > 0 && a_col_end == nr {
+                for col := i3; col < b_col_end; col += 16 { 
+                    kernel_Nx16(a, b, c, row, col, l, r, a_cols, b_cols, nr_rem)
+                }
+                if nc_rem > 0 && b_col_end == nc {
+                    kernel_Nx16_masked(a, b, c, row, col, l, r, a_cols, b_cols, nc_rem, nr_rem)
+                }
+            }
+        } 
+    }
+}
+
+32 KB
+512 KB
+4 MB
+
+P x 16b floats < L3 cache | s3 = 16b
+6a x P floats  <~ L2 cache | s2 = 6a
+Q x 16b floats <~ L1 cache | s1 = Q
+
+s1 ~ (32 x 2^10) / (4 * s3)
+
+s3 < 4 x 2^20 / (4 x P)
+s2 ~ 512 x 2^10 / (4 x P)
+
+P_min = 430
+P_max = 
+
+
+s3 = 96
+s2 = 180
+s1 = 230
+
+

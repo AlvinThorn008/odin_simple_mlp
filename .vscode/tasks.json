@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "command": "",
+    "args": [],
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "make build MODE=debug",
+            "group": "build"
+        }
+    ]
+}
