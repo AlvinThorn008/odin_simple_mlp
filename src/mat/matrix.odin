@@ -43,7 +43,12 @@ copy_smat :: proc(self: SMat) -> SMat {
     out := SMat { self.rows, self.cols, make_aligned([]f32, len(self.data), 32) }
     copy(out.data, self.data)
     return out
-}  
+}
+
+copy_smat_to :: proc(src, dst: SMat) {
+    assert(smat_same_size(src, dst), "Source and destinations must have the same dimensions")
+    copy(dst.data, src.data)
+}
 
 /* Matrix operations */
 
