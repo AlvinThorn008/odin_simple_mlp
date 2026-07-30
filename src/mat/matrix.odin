@@ -1,11 +1,11 @@
 package mat
 
-import "core:mem"
 import "core:simd"
 
 f32x8 :: simd.f32x8
 u16x8 :: simd.u16x8
 
+// A typical matrix type
 SMat :: struct {
     rows, cols: uint,
     data: []f32,
@@ -21,6 +21,9 @@ SMatSlice :: struct {
     data: []f32
 }
 
+// Create a new matrix of given dimensions.
+//
+// The backing store is aligned to 32 bytes. This is not a requirement for constructing `SMat`s however.
 new_smat :: proc(rows, cols: uint) -> SMat {
     return SMat { rows, cols, make_aligned([]f32, rows*cols, 32) }
 }
@@ -35,14 +38,16 @@ delete_smat :: proc(self: SMat) {
     delete(self.data)
 }
 
+// Copy a matrix and return the copy
 copy_smat :: proc(self: SMat) -> SMat {
     out := SMat { self.rows, self.cols, make_aligned([]f32, len(self.data), 32) }
     copy(out.data, self.data)
     return out
 }  
 
-// Matrix operations
+/* Matrix operations */
 
+// Element-wise addition
 smat_add :: proc(self, other: SMat) {
     assert(smat_same_size(self, other), "size mismatch: could not add matrices")
     for i := 0; i < len(self.data); i += 1 {
