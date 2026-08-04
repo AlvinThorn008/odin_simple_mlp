@@ -1,5 +1,7 @@
 package mat
 
+import "core:slice"
+import "core:mem"
 import "core:simd"
 
 f32x8 :: simd.f32x8
@@ -11,14 +13,13 @@ SMat :: struct {
     data: []f32,
 }
 
-// A view over a SMat limited to slices with
-// consecutive rows
-SMatSlice :: struct {
-    rows, cols: uint,
-    // Row stride
-    // The offset from one element to another in the same column but next row
-    row_stride: uint,
-    data: []f32
+// A resizable matrix. 
+//
+// This matrix may have its shape(dimensions) changed at runtime. `DynSMat` is
+// a subtype of `SMat` 
+DynSMat :: struct {
+    using mat: SMat,
+    cap: uint
 }
 
 // Create a new matrix of given dimensions.
@@ -50,27 +51,43 @@ copy_smat_to :: proc(src, dst: SMat) {
     copy(dst.data, src.data)
 }
 
-/* Matrix operations */
+equal :: proc(self: SMat, other: SMat) -> bool {
+    return smat_same_size(self, other) && slice.equal(self.data, other.data)
+}
 
-// Element-wise addition
-smat_add :: proc(self, other: SMat) {
-    assert(smat_same_size(self, other), "size mismatch: could not add matrices")
-    for i := 0; i < len(self.data); i += 1 {
-        self.data[i] += other.data[i]
+smat_transpose :: proc(self: SMat, out: ^SMat) {
+    BLOCK :: 64;
+    ib, jb, i, j: uint
+
+    out.rows, out.cols = self.cols, self.rows
+
+    for ib = 0; ib < self.rows; ib += BLOCK {
+        for jb = 0; jb < self.cols; jb += BLOCK {
+            for i = ib; i < ib + BLOCK && i < self.rows; i += 1 {
+                for j = jb; j < jb + BLOCK && j < self.cols; j += 1 {
+                    out.data[j * self.rows + i] = self.data[i * self.cols + j]
+                }
+            }
+        }
     }
 }
 
-smat_sub :: proc(self, other: SMat) {
-    assert(smat_same_size(self, other), "size mismatch: could not subtract matrices")
-    for i := 0; i < len(self.data); i += 1 {
-        self.data[i] -= other.data[i]
-    }
+// Create a new dynamic matrix of given dimensions and capacity
+//
+// The backing store is aligned to 32 bytes.
+new_dyn_smat :: proc(rows, cols, cap: uint) -> DynSMat {
+    assert(rows * cols <= cap)
+    return DynSMat { rows = rows, cols = cols, cap = cap, data = make_aligned([]f32, cap, 32) }
 }
 
-smat_scale :: proc(self: SMat, scalar: f32) {
-    for i := 0; i < len(self.data); i += 1 {
-        self.data[i] *= scalar
-    }
+// Reshape a `DynSMat`
+//
+// The new size(`rows * cols`) must not exceed `DynSMat.cap`.
+reshape :: proc(self: ^DynSMat, rows: uint, cols: uint) {
+    assert(rows * cols <= self.cap)
+
+    self.rows, self.cols = rows, cols
+    self.data = raw_data(self.data)[:rows*cols]
 }
 
 @(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
@@ -235,13 +252,10 @@ smat_matmul_kernel_super :: proc(
 
 }
 
-smat_same_size :: proc(a, b: SMat) -> bool {
+smat_same_size :: #force_inline proc(a, b: SMat) -> bool {
     return a.cols == b.cols && a.rows == b.rows
 }
 
-smat_matmul_agree :: proc(a, b: SMat) -> bool {
+smat_matmul_agree :: #force_inline proc(a, b: SMat) -> bool {
     return a.cols == b.rows
 }
-
-
-
