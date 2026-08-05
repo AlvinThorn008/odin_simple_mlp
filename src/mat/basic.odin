@@ -26,7 +26,7 @@ smat_elementwise :: #force_inline proc(self, other: SMat, $OP: Operation) {
     // Had to vectorize this manually as auto-vec wouldn't occur without
     // #no_alias. This version still requires that self and other's data don't
     // alias with the exception of self.data == other.data
-    assert(smat_same_size(self, other), "size mismatch: could not add matrices")
+    assert(smat_same_size(self, other), "size mismatch: this operation is element-wise")
     
     t0, t1, t2, t3: f32x8
 
