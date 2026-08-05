@@ -1,5 +1,6 @@
 package nn
 
+import "core:time"
 import "core:fmt"
 import "core:math"
 import "core:mem"
@@ -31,7 +32,19 @@ main :: proc() {
     create_dataset(&dataset)
     defer destroy_dataset(&dataset)
 
-    train(&net, dataset[:], 1.21, len(dataset), 250)
+    EPOCHS :: 250
+    ETA :: 3.32
+    start := time.tick_now()
+    train(&net, dataset[:], ETA, len(dataset), EPOCHS)
+    elapsed := time.tick_since(start)
+    fmt.printfln("%d epochs with eta = %f in %fms", EPOCHS, ETA, time.duration_milliseconds(elapsed))
+
+    for example in dataset {
+        out := forward_prop(&net, example.input)
+        fmt.println(example.input)
+        fmt.println(out)
+        fmt.println("")
+    }
 }
 
 // A 3 layer FCNN 
