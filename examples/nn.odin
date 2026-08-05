@@ -15,6 +15,11 @@ NN_DEBUG :: #config(NN_DEBUG, false)
 matmul :: smat.smat_matmul_blocking
 SMat :: smat.SMat
 
+/*
+This file contains the setup for a basic FCNN. The network is to learn
+the function of a 4-bit decoder. Given 4-bit binary number(called a) as a vector of 4 floats,
+it should output a vector of 16 floats that is 1.0 at index a
+*/
 main :: proc() {
     rand.reset(69_69_69)
 
