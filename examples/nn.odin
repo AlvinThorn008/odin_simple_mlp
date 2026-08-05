@@ -131,6 +131,10 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
 }
 
 backward_prop :: proc(net: ^Network, target: SMat) {
+    mem.zero_slice(net.dw1.data)
+    mem.zero_slice(net.dw2.data)
+    mem.zero_slice(net.db1.data)
+
     // db2 softmax + cross entropy
     // db2 = a2 - target
     smat.copy_smat_to(net.a2, net.db2)
