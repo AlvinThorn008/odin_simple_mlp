@@ -301,7 +301,7 @@ cross_entropy :: proc(a, b: SMat) -> f64 {
     // Just saying, I'm not doing that here atm
 
     sum := f64(0.0)
-    for i in 0..<len(a.data) do sum -= f64(b.data[i]) * math.ln(f64(a.data[i]))
+    for i in 0..<len(a.data) do sum -= f64(b.data[i]) * math.ln(f64(max(a.data[i], 1e-7)))
 
     return sum
 }
