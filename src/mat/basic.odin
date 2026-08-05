@@ -42,7 +42,7 @@ smat_elementwise :: #force_inline proc(self, other: SMat, $OP: Operation) {
     i := 0
     length := len(self.data)
     size8 := length / 8
-    for ; i < size8; i += 4 {
+    for ; i + 3 < size8; i += 4 {
         t0 = op(a[i], b[i], OP)
         t1 = op(a[i + 1], b[i + 1], OP)
         t2 = op(a[i + 2], b[i + 2], OP)
