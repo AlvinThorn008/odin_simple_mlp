@@ -12,6 +12,8 @@ Custom matrix operations to accelerate batched NN training
 
 
 // Add a column vector to a matrix by the vector to each column of the matrix
+//
+// NOTE: This procedure is optimized for matrix-vector addition. If `self` is a column vector, it 
 broadcast_add :: proc(self, column: SMat) {
     assert(column.cols == 1, "column must be a column vector")
     assert(self.rows == column.rows, "Row dimension must match")
@@ -20,6 +22,13 @@ broadcast_add :: proc(self, column: SMat) {
 
     vec_rows := column.rows
     mat_cols := self.cols
+
+    // Degenerate case: self is a column vector
+    // `smat_add` is vectorized whereas (1) will perform scalar addition
+    // in this degenerate case.
+    if self.cols == 1 { mat.smat_add(self, column) }
+
+    // (1)
     for i := uint(0); i < vec_rows; i += 1 {
         a := f32x8(column.data[i])
         c: uint
