@@ -21,7 +21,7 @@ GradFn :: #type proc(target, grad: SMat)
 
 
 Network :: struct {
-    x: SMat,
+    x: mat.DynSMat,
     temp: mat.DynSMat,
     layers: [dynamic]Layer,
     output_grad_proc: GradFn,
@@ -53,15 +53,15 @@ backward_prop :: proc(net: ^Network, target: SMat) {
 
     num_layers := len(net.layers)
     out_layer := &net.layers[num_layers - 1]
-    prev_layer := &net.layers[num_layers - 2]
+    prev_layer_act := num_layers > 1 ? net.layers[num_layers - 2].a :net.x
 
     // Calculate output layer gradient
     mem.zero_slice(out_layer.dw.data)
     net.output_grad_proc(target, out_layer.db)
 
     // Calculate output layer weight gradients
-    mat.reshape(&net.temp, prev_layer.a.cols, prev_layer.a.rows)
-    mat.smat_transpose(prev_layer.a, &net.temp)
+    mat.reshape(&net.temp, prev_layer_act.cols, prev_layer_act.rows)
+    mat.smat_transpose(prev_layer_act, &net.temp)
     matmul(out_layer.db, net.temp, out_layer.dw)
 
     // Zero out gradients - `matmul` adds(not overwrites) its result to output
@@ -79,7 +79,7 @@ backward_prop :: proc(net: ^Network, target: SMat) {
     }
 
     // Compute the first HIDDEN layer's gradients
-    compute_layer_gradients(net, &net.layers[0], &net.layers[1], net.x)
+    if num_layers > 1 do compute_layer_gradients(net, &net.layers[0], &net.layers[1], net.x)
 }
 
 // This actually only computes the `prev`'s gradients
