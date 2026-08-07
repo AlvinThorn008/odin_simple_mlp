@@ -5,6 +5,10 @@ import mat "../mat"
 SMat :: mat.SMat
 matmul :: mat.smat_matmul_blocking
 
+// A FCNN layer
+//
+// Weights are associated with the layer they feed into and as such, `Layer` doesn't model
+// the input layer of a network.
 Layer :: struct {
     w, b, z, a, 
     dw, db, acc_dw, acc_db: SMat,
