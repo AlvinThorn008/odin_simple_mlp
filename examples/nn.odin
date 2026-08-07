@@ -158,10 +158,10 @@ backward_prop :: proc(net: ^Network, target: SMat) {
     smat.smat_transpose(net.a1, &net.mT)
     matmul(net.db2, net.mT, net.dw2)
 
-    // db1 = f1'(z1) * (W1^T . db2)
+    // db1 = f1'(z1) * (W2^T . db2)
     smat.reshape(&net.mT, net.w2.cols, net.w2.rows)
     smat.smat_transpose(net.w2, &net.mT)
-    matmul(net.mT, net.db2, net.db1) // db1 = W1^T . db2
+    matmul(net.mT, net.db2, net.db1) // db1 = W2^T . db2
     smat.reshape(&net.mT, net.a1.rows, net.a1.cols)
     diff_relu(net.z1, net.mT)        // temp = f1'(z1)
     smat.smat_mul(net.db1, net.mT)
