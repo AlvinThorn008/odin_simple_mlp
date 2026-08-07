@@ -12,6 +12,8 @@ Layer :: struct {
 }
 
 ActFn :: #type proc(input, output: SMat)
+GradFn :: #type proc(target, grad: SMat)
+
 
 Network :: struct {
     x: SMat,
