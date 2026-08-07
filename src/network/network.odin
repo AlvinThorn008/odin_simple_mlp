@@ -55,20 +55,19 @@ backward_prop :: proc(net: ^Network, target: SMat) {
     out_layer := &net.layers[num_layers - 1]
     prev_layer_act := num_layers > 1 ? net.layers[num_layers - 2].a :net.x
 
+    // Zero out gradients - `matmul` adds(not overwrites) its result to output
+    for &layer in net.layers {
+        mem.zero_slice(layer.dw.data)
+        mem.zero_slice(layer.db.data)
+    }
+
     // Calculate output layer gradient
-    mem.zero_slice(out_layer.dw.data)
     net.output_grad_proc(target, out_layer.db)
 
     // Calculate output layer weight gradients
     mat.reshape(&net.temp, prev_layer_act.cols, prev_layer_act.rows)
     mat.smat_transpose(prev_layer_act, &net.temp)
     matmul(out_layer.db, net.temp, out_layer.dw)
-
-    // Zero out gradients - `matmul` adds(not overwrites) its result to output
-    for &layer in net.layers {
-        mem.zero_slice(layer.dw.data)
-        mem.zero_slice(layer.db.data)
-    }
 
     // Each iteration computes net.layers[i - 1] or `prev`'s gradients
     // net.layers doesn't hold the input layer so the pre_prev, prev, current won't work
