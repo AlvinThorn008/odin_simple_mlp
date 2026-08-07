@@ -11,8 +11,8 @@ matmul :: mat.smat_matmul_blocking
 // Weights are associated with the layer they feed into and as such, `Layer` doesn't model
 // the input layer of a network.
 Layer :: struct {
-    w, b, z, a, 
-    dw, db, acc_dw, acc_db: SMat,
+    w, b, acc_dw, acc_db, dw: SMat,
+    z, a, db: mat.DynSMat,
     act_fn: ActFn
 }
 
@@ -22,8 +22,10 @@ GradFn :: #type proc(target, grad: SMat)
 
 Network :: struct {
     x: SMat,
-    temp: SMat, 
-    layers: [dynamic]Layer
+    temp: mat.DynSMat,
+    layers: [dynamic]Layer,
+    output_grad_proc: GradFn,
+    max_batch_size: uint
 }
 
 forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
