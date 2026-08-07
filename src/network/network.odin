@@ -24,6 +24,7 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
     mat.copy_smat_to(input, net.x)
     mat.copy_smat_to(net.layers[0].b, net.layers[0].z)
     matmul(net.layers[0].w, input, net.layers[0].z)
+    broadcast_add(net.layers[0].z, net.layers[0].b)
     net.layers[0].act_fn(net.layers[0].z, net.layers[0].a)
 
     i: int
@@ -31,6 +32,7 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
         prev, current := &net.layers[i - 1], &net.layers[i]
         mat.copy_smat_to(current.b, current.z)
         matmul(current.w, prev.a, current.z)
+        broadcast_add(current.z, current.b)
         current.act_fn(current.z, current.a)
     }
 
