@@ -1,5 +1,6 @@
 package network
 
+import "core:fmt"
 import "core:mem"
 import mat "../mat"
 
@@ -13,19 +14,33 @@ matmul :: mat.smat_matmul_blocking
 Layer :: struct {
     w, b, acc_dw, acc_db, dw: SMat,
     z, a, db: mat.DynSMat,
-    act_fn: ActFn
+    act_fn, diff_act_fn: ActProc
 }
 
-ActFn :: #type proc(input, output: SMat)
-GradFn :: #type proc(target, grad: SMat)
+ActProc :: #type proc(input, output: SMat)
+GradProc :: #type proc(target, grad: SMat)
+CostProc :: #type proc(a: SMat) -> f64
+DcostProc :: #type proc(a: SMat) -> SMat
+
+ActFn :: enum { Null, ReLU, SoftMax, Sigmoid }
+CostFn :: enum { CrossEntropy, SquaredError }
+OutputType :: enum { Dist, General }
+
+LayerDef :: struct { num_nodes: uint, activation_fun: ActFn }
 
 
 Network :: struct {
     x: mat.DynSMat,
     temp: mat.DynSMat,
     layers: [dynamic]Layer,
-    output_grad_proc: GradFn,
+    output_grad_proc: GradProc,
+    cost_proc: CostProc,
+    diff_cost_proc: DcostProc,
     max_batch_size: uint
+}
+
+create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, max_batch_size: uint, layers: ..LayerDef)  {
+    
 }
 
 forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
@@ -88,7 +103,7 @@ compute_layer_gradients :: #force_inline proc(net: ^Network, prev, current: ^Lay
     matmul(net.temp, current.db, prev.db) // db_(l-1) = (W_l)^T . db_l
 
     mat.reshape(&net.temp, prev.a.rows, prev.a.cols)
-    prev.act_fn(prev.z, net.temp)   // temp = f_(l-1)'(z_(l-1))
+    prev.diff_act_fn(prev.z, net.temp)   // temp = f_(l-1)'(z_(l-1))
     mat.smat_mul(prev.db, net.temp) // db_(l-1) = temp * db_(l-1) 
 
     mat.reshape(&net.temp, pre_prev_act.cols, pre_prev_act.rows)
