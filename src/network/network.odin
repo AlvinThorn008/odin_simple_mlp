@@ -1,5 +1,6 @@
 package network
 
+import "core:mem"
 import mat "../mat"
 
 SMat :: mat.SMat
