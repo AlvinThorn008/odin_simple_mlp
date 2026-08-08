@@ -63,9 +63,9 @@ smat_elementwise :: #force_inline proc(self, other: SMat, $OP: Operation) {
     i *= 8
     for k in 0..<7 {
         if i >= length do break
-        when OP == .Add do a[i] += b[i]
-        else when OP == .Sub do a[i] -= b[i]
-        else when OP == .Mul do a[i] *= b[i]
+        when OP == .Add do self.data[i] += other.data[i]
+        else when OP == .Sub do self.data[i] -= other.data[i]
+        else when OP == .Mul do self.data[i] *= other.data[i]
 
         i += 1
     }
