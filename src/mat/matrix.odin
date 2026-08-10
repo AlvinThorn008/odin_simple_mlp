@@ -72,12 +72,24 @@ smat_transpose :: proc(self: SMat, out: ^SMat) {
     }
 }
 
+new_dyn_smat :: proc{
+    new_dyn_smat_cap,
+    new_dyn_smat_default
+}
+
 // Create a new dynamic matrix of given dimensions and capacity
 //
 // The backing store is aligned to 32 bytes.
-new_dyn_smat :: proc(rows, cols, cap: uint) -> DynSMat {
+new_dyn_smat_cap :: proc(rows, cols, cap: uint) -> DynSMat {
     assert(rows * cols <= cap)
     return DynSMat { rows = rows, cols = cols, cap = cap, data = make_aligned([]f32, cap, 32) }
+}
+
+// Create a new dynamic matrix of given dimensions. The capacity is `rows * cols`
+//
+// The backing store is aligned to 32 bytes.
+new_dyn_smat_default :: proc(rows, cols: uint) -> DynSMat {
+    return DynSMat { rows = rows, cols = cols, cap = rows * cols, data = make_aligned([]f32, rows * cols, 32) }
 }
 
 // Reshape a `DynSMat`
