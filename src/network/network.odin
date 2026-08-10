@@ -18,9 +18,9 @@ Layer :: struct {
 }
 
 ActProc :: #type proc(input, output: SMat)
-GradProc :: #type proc(target, grad: SMat)
+GradProc :: #type proc(net: ^Network, target, grad: SMat)
 CostProc :: #type proc(a: SMat) -> f64
-DcostProc :: #type proc(a: SMat) -> SMat
+DcostProc :: #type proc(output, target, res: SMat)
 
 ActFn :: enum { Null, ReLU, SoftMax, Sigmoid }
 CostFn :: enum { CrossEntropy, SquaredError }
@@ -39,8 +39,70 @@ Network :: struct {
     max_batch_size: uint
 }
 
-create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, max_batch_size: uint, layers: ..LayerDef)  {
-    
+create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, max_batch_size: uint, layers: ..LayerDef) {
+    num_layers := len(layers)
+    assert(num_layers >= 2, "At least an input and output layer must be defined")
+    net.x = mat.new_dyn_smat(layers[0].num_nodes, max_batch_size)
+    net.layers = make([dynamic]Layer, num_layers - 1)
+
+    use_soft_cross := cost_fn == .CrossEntropy && output_type == .Dist
+
+    // TODO: cost_proc, diff_cost_proc
+
+    temp_size: uint
+
+    for i := 1; i < num_layers; i += 1 {
+        acts: [2]ActProc
+        switch layers[i].activation_fun {
+            case .ReLU    : acts = { relu, diff_relu }
+            case .Sigmoid : acts = { sigmoid, diff_sigmoid }
+            case .SoftMax :
+                assert(i + 1 == num_layers && use_soft_cross, "softmax currently only supported in the output layer with cross entropy and Distribution output")
+                net.output_grad_proc = output_grad_cross_entropy
+                acts = { softmax, softmax }           
+            case .Null:
+            case:
+        }
+
+        next_layer_nodes := i + 1 < num_layers ? layers[i+1].num_nodes : 0
+
+        temp_size = max(
+            temp_size,
+            layers[i].num_nodes * max_batch_size, // current activation
+            layers[i].num_nodes * next_layer_nodes, // next weight
+            layers[i-1].num_nodes * max_batch_size // previous activation
+        )
+
+        inputs, outputs := layers[i-1].num_nodes, layers[i].num_nodes
+
+        append(&net.layers, Layer {
+            w = mat.new_smat(outputs, inputs),
+            acc_dw = mat.new_smat(outputs, inputs),
+            dw = mat.new_smat(outputs, inputs),
+            z = mat.new_dyn_smat(outputs, max_batch_size),
+            a = mat.new_dyn_smat(outputs, max_batch_size),
+            db = mat.new_dyn_smat(outputs, max_batch_size),
+            b = mat.new_smat(outputs, 1),
+            acc_db = mat.new_smat(outputs, 1),
+            act_fn = acts[0],
+            diff_act_fn = acts[1]
+        })
+    }
+    net.temp = mat.new_dyn_smat(layers[num_layers-1].num_nodes, max_batch_size)
+}
+
+resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
+    if batch_size > net.max_batch_size do return false
+
+    mat.reshape(&net.x, net.x.rows, batch_size)
+
+    for &layer in net.layers {
+        mat.reshape(&layer.z, layer.z.rows, batch_size)
+        mat.reshape(&layer.a, layer.a.rows, batch_size)
+        mat.reshape(&layer.db, layer.db.rows, batch_size)
+    }
+
+    return true
 }
 
 forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
@@ -77,7 +139,7 @@ backward_prop :: proc(net: ^Network, target: SMat) {
     }
 
     // Calculate output layer gradient
-    net.output_grad_proc(target, out_layer.db)
+    net.output_grad_proc(net, target, out_layer.db)
 
     // Calculate output layer weight gradients
     mat.reshape(&net.temp, prev_layer_act.cols, prev_layer_act.rows)
@@ -109,4 +171,16 @@ compute_layer_gradients :: #force_inline proc(net: ^Network, prev, current: ^Lay
     mat.reshape(&net.temp, pre_prev_act.cols, pre_prev_act.rows)
     mat.smat_transpose(pre_prev_act, &net.temp)
     matmul(prev.db, net.temp, prev.dw)  // dw_(l-1) = db_(l-1) . (a_(l-2))^T
+}
+
+output_grad_cross_entropy :: proc(net: ^Network, target, grad: SMat) {
+    mat.copy_smat_to(net.layers[len(net.layers) - 1].a, grad)
+    mat.smat_sub(grad, target)
+}
+
+output_grad :: proc(net: ^Network, target, grad: SMat) {
+    last_layer := &net.layers[len(net.layers) - 1]
+    net.diff_cost_proc(last_layer.a, target, grad)
+    last_layer.diff_act_fn(last_layer.z, last_layer.z)
+    mat.smat_mul(grad, last_layer.z)
 }
