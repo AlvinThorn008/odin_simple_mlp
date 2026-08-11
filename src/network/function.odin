@@ -75,6 +75,14 @@ cross_entropy :: proc(a, b: SMat) -> f64 {
     return sum
 }
 
+diff_cross_entropy :: proc(output, target, res: SMat) {
+    assert(smat.smat_same_size(output, target) && smat.smat_same_size(target, res), "size mismatch: matrices must be the same size")
+
+    for i in 0..<len(output.data) {
+        res.data[i] -= -target.data[i] / (output.data[i] + 1e-7)
+    }
+}
+
 squared_error :: proc(a, b: SMat) -> f64 {
     assert(smat.smat_same_size(a, b), "size mismatch: matrices must be the same size")
     sum: f64 = 0.0
