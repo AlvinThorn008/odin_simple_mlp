@@ -1,6 +1,6 @@
 package network
 
-import "core:fmt"
+import "core:log"
 import "core:mem"
 import mat "../mat"
 
@@ -19,7 +19,7 @@ Layer :: struct {
 
 ActProc :: #type proc(input, output: SMat)
 GradProc :: #type proc(net: ^Network, target, grad: SMat)
-CostProc :: #type proc(a: SMat) -> f64
+CostProc :: #type proc(output, target: SMat) -> f64
 DcostProc :: #type proc(output, target, res: SMat)
 
 ActFn :: enum { Null, ReLU, SoftMax, Sigmoid }
@@ -43,11 +43,19 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
     num_layers := len(layers)
     assert(num_layers >= 2, "At least an input and output layer must be defined")
     net.x = mat.new_dyn_smat(layers[0].num_nodes, max_batch_size)
+
+    log.debugf("(Layer 0) Layer size: %d | X: %dx%d", net.x.rows, net.x.rows, net.x.cols)
+
     net.layers = make([dynamic]Layer, num_layers - 1)
 
     use_soft_cross := cost_fn == .CrossEntropy && output_type == .Dist
 
-    // TODO: cost_proc, diff_cost_proc
+    switch cost_fn {
+        case .CrossEntropy:
+            net.cost_proc, net.diff_cost_proc = cross_entropy, diff_cross_entropy
+        case .SquaredError:
+            net.cost_proc, net.diff_cost_proc = squared_error, diff_squared_error
+    }
 
     temp_size: uint
 
@@ -75,6 +83,9 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
 
         inputs, outputs := layers[i-1].num_nodes, layers[i].num_nodes
 
+        log.debugf("(Layer %d) Layer size: %d | Z: %dx%d | W: %dx%d | B: %dx%d | act: %v", i, outputs, outputs, 
+            max_batch_size, outputs, inputs, outputs, 1, layers[i].activation_fun)
+
         append(&net.layers, Layer {
             w = mat.new_smat(outputs, inputs),
             acc_dw = mat.new_smat(outputs, inputs),
@@ -88,7 +99,9 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
             diff_act_fn = acts[1]
         })
     }
+
     net.temp = mat.new_dyn_smat(layers[num_layers-1].num_nodes, max_batch_size)
+    log.debugf("Temp matrix sized to %dx%d = %d", net.temp.rows, net.temp.cols, len(net.temp.data))
 }
 
 resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
