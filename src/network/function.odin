@@ -93,7 +93,7 @@ squared_error :: proc(a, b: SMat) -> f64 {
     return sum
 }
 
-dsquared_error :: proc(a, b, out: SMat) {
+diff_squared_error :: proc(a, b, out: SMat) {
     assert(smat.smat_same_size(a, b), "size mismatch: matrices must be the same size")
     for i := 0; i < len(a.data); i += 1 {
         out.data[i] = 2.0 * (a.data[i] - b.data[i])
