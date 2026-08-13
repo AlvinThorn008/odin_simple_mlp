@@ -12,8 +12,6 @@ Custom matrix operations to accelerate batched NN training
 
 
 // Add a column vector to a matrix by the vector to each column of the matrix
-//
-// NOTE: This procedure is optimized for matrix-vector addition. If `self` is a column vector, it 
 broadcast_add :: proc(self, column: SMat) {
     assert(column.cols == 1, "column must be a column vector")
     assert(self.rows == column.rows, "Row dimension must match")
