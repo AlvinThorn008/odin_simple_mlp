@@ -86,15 +86,22 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
             case .ReLU    : acts = { relu, diff_relu }
             case .Sigmoid : acts = { sigmoid, diff_sigmoid }
             case .SoftMax :
-                assert(i + 1 == num_layers && use_soft_cross, "softmax currently only supported in the output layer with cross entropy and Distribution output")
+                assert(i + 1 == num_layers && use_soft_cross, "currently, softmax is only supported in the output layer with cross entropy loss and Distribution output")
                 net.output_grad_proc = output_grad_cross_entropy
                 acts = { softmax, softmax }           
             case .Null:
             case:
         }
 
+        // Prevent out of bounds when getting next layer's size
         next_layer_nodes := i + 1 < num_layers ? layers[i+1].num_nodes : 0
 
+        /* TODO: it seems like the current activation(due to derivative of z) can be excluded from the max if f^l(z) is computed in-place.
+        This is possible but do investigate.
+
+        net.temp's capacity should be big enough to accommodate the largest matrix in the network (except the first weight matrix)
+        The exact sizes chosen are derived from the backprop equations. Transposes and derivation use the net.temp as a output matrix. 
+        */
         temp_size = max(
             temp_size,
             layers[i].num_nodes * max_batch_size, // current activation
@@ -139,6 +146,12 @@ destroy_network :: proc(net: ^Network) {
     delete(net.layers)
 }
 
+/* Resize the network's matrices to agree with the specified `batch_size` for the input
+
+This operation cannot grow the backing buffers of the network's matrices and thus never allocates. It is O(num_layers)
+
+if `batch_size` exceeds `net.max_batch_size`, the procedure does nothing and returns false
+*/
 resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
     if batch_size > net.max_batch_size do return false
 
@@ -175,12 +188,12 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
 
 backward_prop :: proc(net: ^Network, target: SMat) {
     assert(len(net.layers) > 0, "Must have an output layer")
-
+  
     num_layers := len(net.layers)
     out_layer := &net.layers[num_layers - 1]
     prev_layer_act := num_layers > 1 ? net.layers[num_layers - 2].a :net.x
 
-    // Zero out gradients - `matmul` adds(not overwrites) its result to output
+    // Zero out gradients - matmul adds(not overwrites) its result to output
     for &layer in net.layers {
         mem.zero_slice(layer.dw.data)
         mem.zero_slice(layer.db.data)
@@ -188,13 +201,16 @@ backward_prop :: proc(net: ^Network, target: SMat) {
 
     // Calculate output layer gradient
     net.output_grad_proc(net, target, out_layer.db)
+    
+    // Note/TODO: transpose only require that the matrix is big enough to store the transposed matrix
+    // so we could size net.temp to 1xlen(data). Not sure why that would be useful... yet?
 
     // Calculate output layer weight gradients
     mat.reshape(&net.temp, prev_layer_act.cols, prev_layer_act.rows)
     mat.smat_transpose(prev_layer_act, &net.temp)
     matmul(out_layer.db, net.temp, out_layer.dw)
 
-    // Each iteration computes net.layers[i - 1] or `prev`'s gradients
+    // Each iteration computes net.layers[i - 1] or prev's gradients
     // net.layers doesn't hold the input layer so the pre_prev, prev, current won't work
     // (without some checks) so I handle it just after the loop
     for i := num_layers - 1; i > 1; i -= 1 {
