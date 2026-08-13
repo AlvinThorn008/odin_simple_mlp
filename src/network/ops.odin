@@ -60,3 +60,45 @@ broadcast_add :: proc(self, column: SMat) {
         }
     } 
 }
+
+/*
+Reduce matrix `self` into column vector `column` by summing the columns of
+`self`
+*/
+reduce_add :: proc(self, column: SMat) {
+    assert(column.cols == 1, "column must be a column vector")
+    assert(self.rows == column.rows, "Row dimension must match")
+
+    if self.cols == 1 { mat.copy_smat_to(self, column); return }
+
+    t0, t1, t2, t3: f32x8
+
+    for r := uint(0); r < self.rows; r += 1 {
+        cols32 := self.cols & ~uint(31)
+        cols8  := self.cols & ~uint(7)
+        row_sum: f32 = 0.0
+        c: uint
+        for c = 0; c < cols32; c += 32 {
+            // NOTE: Matrix rows are not guaranteed to be aligned
+            // so unaligned access is used here
+            t0 = mat.simd_from_slice(f32x8, self.data[r * self.cols + c:])
+            t1 = mat.simd_from_slice(f32x8, self.data[r * self.cols + c + 8:])
+            t2 = mat.simd_from_slice(f32x8, self.data[r * self.cols + c + 16:])
+            t3 = mat.simd_from_slice(f32x8, self.data[r * self.cols + c + 24:])
+
+            t0 = simd.add(t0, t1)
+            t2 = simd.add(t2, t3) 
+            t0 = simd.add(t0, t2)
+
+            row_sum += simd.reduce_add_bisect(t0)
+        }
+        for ; c < cols8; c += 8 {
+            t0 = mat.simd_from_slice(f32x8, self.data[r * self.cols + c:])
+            row_sum += simd.reduce_add_bisect(t0)
+        }
+        for ; c < self.cols; c += 1 {
+            row_sum += self.data[r * self.cols + c]
+        }
+        column.data[r] = row_sum
+    }
+}
