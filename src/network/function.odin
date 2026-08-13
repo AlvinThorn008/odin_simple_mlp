@@ -1,5 +1,6 @@
 package network
 
+import "core:slice"
 import "core:simd"
 import "core:math"
 import smat "../mat"
@@ -38,8 +39,27 @@ diff_relu :: proc(mat, out: SMat) {
 }
 
 
+softmax_batched :: proc(mat, out: SMat) {
+    assert(smat.smat_same_size(mat, out), "size mismatch: softmax is an element-wise operation")
+
+    for c in 0..<mat.cols {
+        max_val := -math.INF_F32
+        sum := f32(0.0)
+        for r in 0..<mat.rows do max_val = max(max_val, mat.data[r * mat.cols + c])
+
+        for r in 0..<mat.rows {
+            s0 := math.exp(mat.data[r * mat.cols + c] - max_val)
+            out.data[r * out.cols + c] = s0
+            sum += s0
+        }
+
+        for r in 0..<mat.rows do out.data[r * out.cols + c] /= sum
+    }
+}
+
 softmax :: proc(mat, out: SMat) {
     assert(smat.smat_same_size(mat, out), "size mismatch: softmax is an element-wise operation")
+    assert(mat.cols == 1, "inputs must be column vectors")
     max_val := -math.INF_F32
     len_vecs := len(mat.data) & ~int(7)
 
