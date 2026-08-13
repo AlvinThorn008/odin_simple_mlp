@@ -232,3 +232,37 @@ output_grad :: proc(net: ^Network, target, grad: SMat) {
     last_layer.diff_act_fn(last_layer.z, last_layer.z)
     mat.smat_mul(grad, last_layer.z)
 }
+
+// A training example for the network
+Example :: struct { input: SMat, output: SMat }
+
+train :: proc(net: ^Network, dataset: []Example, eta: f32, batch_size, epochs: uint) {
+    
+}
+
+train_batch :: proc(net: ^Network, batch: Example, eta: f32) {
+    
+    scale := eta / f32(batch.input.cols)
+    
+    forward_prop(net, batch.input)
+    backward_prop(net, batch.output)
+
+    batch_cost := net.cost_proc(net.layers[len(net.layers)-1].a, batch.output) / f64(batch.output.cols)
+
+    log.infof("Batch cost: %f", batch_cost)
+
+    for &layer in net.layers {
+        reduce_add(layer.db, layer.acc_db)
+        mat.smat_scale(layer.acc_db, scale)
+        mat.smat_sub(layer.b, layer.acc_db)
+        mat.smat_scale(layer.acc_dw, scale)
+        mat.smat_sub(layer.w, layer.acc_dw)
+    }
+}
+
+clear_accumulators :: proc(net: ^Network) {
+    for &layer in net.layers {
+        mem.zero_slice(layer.acc_db.data)
+        mem.zero_slice(layer.acc_dw.data)
+    }
+}
