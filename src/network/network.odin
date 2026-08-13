@@ -118,8 +118,8 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
         b := mat.new_smat(outputs, 1)
 
         // He initialization
-        for &val in w.data do val = rand.float32_normal(0.0, 2.0/f32(outputs))
-        for &val in b.data do val = rand.float32_normal(0.0, 2.0/f32(outputs))
+        for &val in w.data do val = rand.float32_normal(0.0, 2.0/f32(inputs))
+        for &val in b.data do val = rand.float32_normal(0.0, 2.0/f32(inputs))
 
         append(&net.layers, Layer {
             w = w,
