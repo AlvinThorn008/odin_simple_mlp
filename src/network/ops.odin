@@ -26,7 +26,7 @@ broadcast_add :: proc(self, column: SMat) {
     // Degenerate case: self is a column vector
     // `smat_add` is vectorized whereas (1) will perform scalar addition
     // in this degenerate case.
-    if self.cols == 1 { mat.smat_add(self, column) }
+    if self.cols == 1 { mat.smat_add(self, column); return }
 
     // (1)
     for i := uint(0); i < vec_rows; i += 1 {
