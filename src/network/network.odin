@@ -46,7 +46,7 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
 
     log.debugf("(Layer 0) Layer size: %d | X: %dx%d", net.x.rows, net.x.rows, net.x.cols)
 
-    net.layers = make([dynamic]Layer, num_layers - 1)
+    net.layers = make([dynamic]Layer, 0, num_layers - 1)
 
     use_soft_cross := cost_fn == .CrossEntropy && output_type == .Dist
 
