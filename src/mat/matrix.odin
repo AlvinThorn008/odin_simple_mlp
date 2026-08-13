@@ -3,6 +3,7 @@ package mat
 import "core:slice"
 import "core:mem"
 import "core:simd"
+import "core:fmt"
 
 f32x8 :: simd.f32x8
 u16x8 :: simd.u16x8
@@ -270,4 +271,35 @@ smat_same_size :: #force_inline proc(a, b: SMat) -> bool {
 
 smat_matmul_agree :: #force_inline proc(a, b: SMat) -> bool {
     return a.cols == b.rows
+}
+
+Matrix_Formatter :: proc(fi: ^fmt.Info, arg: any, verb: rune) -> bool {
+    m := (^SMat)(arg.data)
+
+    if verb != 'v' || !fi.hash do return false
+
+    fmt.wprint(fi.writer, "SMat{\n")
+    fi.indent += 1
+    fmt.fmt_write_indent(fi)
+    fmt.wprintf(fi.writer, "rows = %d,\n", m.rows)
+    fmt.fmt_write_indent(fi)
+    fmt.wprintf(fi.writer, "cols = %d,\n", m.cols)
+    fmt.fmt_write_indent(fi)
+    fmt.wprint(fi.writer, "data = [\n")
+    fi.indent += 1
+    for i in 0..<m.rows {
+        fmt.fmt_write_indent(fi)
+        for j in 0..<m.cols {
+            fmt.wprintf(fi.writer, "%-6f ", m.data[i * m.cols + j])
+        }
+        fmt.wprint(fi.writer, "\n")
+    }
+    fi.indent -= 1
+    fmt.fmt_write_indent(fi)
+    fmt.wprint(fi.writer, "]\n")
+    fi.indent -= 1
+    fmt.fmt_write_indent(fi)
+    fmt.wprint(fi.writer, "}")
+
+    return true
 }
