@@ -18,6 +18,18 @@ Layer :: struct {
     act_fn, diff_act_fn: ActProc
 }
 
+destroy_layer :: proc(layer: ^Layer) {
+    mat.delete_smat(layer.a)
+    mat.delete_smat(layer.w)
+    mat.delete_smat(layer.acc_db)
+    mat.delete_smat(layer.acc_dw)
+    mat.delete_smat(layer.b)
+    mat.delete_smat(layer.z)
+    mat.delete_smat(layer.dw)
+    mat.delete_smat(layer.db)
+}
+
+// Activation function
 ActProc :: #type proc(input, output: SMat)
 GradProc :: #type proc(net: ^Network, target, grad: SMat)
 // Cost function
@@ -118,6 +130,13 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
 
     net.temp = mat.new_dyn_smat(1, temp_size)
     log.debugf("Temp matrix sized to %dx%d = %d", net.temp.rows, net.temp.cols, len(net.temp.data))
+}
+
+destroy_network :: proc(net: ^Network) {
+    mat.delete_smat(net.x)
+    mat.delete_smat(net.temp)
+    for &layer in net.layers do destroy_layer(&layer)
+    delete(net.layers)
 }
 
 resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
