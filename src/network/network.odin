@@ -20,11 +20,19 @@ Layer :: struct {
 
 ActProc :: #type proc(input, output: SMat)
 GradProc :: #type proc(net: ^Network, target, grad: SMat)
+// Cost function
 CostProc :: #type proc(output, target: SMat) -> f64
+// Derivative of a cost function
 DcostProc :: #type proc(output, target, res: SMat)
 
+// Various activation functions
 ActFn :: enum { Null, ReLU, SoftMax, Sigmoid }
+// Various cost functions
 CostFn :: enum { CrossEntropy, SquaredError }
+// Network output type
+// - `.Dist`: The output layer of the network should be a distribution i.e.
+// the sum of the nodes is 1.
+// - `.General`: No requirement on the output layer.
 OutputType :: enum { Dist, General }
 
 LayerDef :: struct { num_nodes: uint, activation_fun: ActFn }
