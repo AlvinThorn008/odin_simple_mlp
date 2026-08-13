@@ -267,10 +267,14 @@ train_batch :: proc(net: ^Network, batch: Example, eta: f32) {
 
     log.infof("Batch cost: %f", batch_cost)
 
+    // Acculumate and apply gradients
     for &layer in net.layers {
+
         reduce_add(layer.db, layer.acc_db)
         mat.smat_scale(layer.acc_db, scale)
         mat.smat_sub(layer.b, layer.acc_db)
+
+        mat.smat_add(layer.acc_dw, layer.dw)
         mat.smat_scale(layer.acc_dw, scale)
         mat.smat_sub(layer.w, layer.acc_dw)
     }
