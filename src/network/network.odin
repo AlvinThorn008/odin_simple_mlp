@@ -151,7 +151,7 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
         current.act_fn(current.z, current.a)
     }
 
-    return net.layers[i].a
+    return net.layers[i-1].a
 }
 
 backward_prop :: proc(net: ^Network, target: SMat) {
