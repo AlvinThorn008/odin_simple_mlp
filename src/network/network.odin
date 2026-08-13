@@ -169,18 +169,18 @@ resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
 forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
     assert(len(net.layers) > 0, "Must have an output layer")
     mat.copy_smat_to(input, net.x)
-    matmul(net.layers[0].w, input, net.layers[0].z)
     // TODO: perhaps a "broadcast_copy" might be a better
     // mat.copy_smat_to(net.layers[0].b, net.layers[0].z)
     broadcast_add(net.layers[0].z, net.layers[0].b)
+    matmul(net.layers[0].w, input, net.layers[0].z)
     net.layers[0].act_fn(net.layers[0].z, net.layers[0].a)
 
     i: int
     for i = 1; i < len(net.layers); i += 1 {
         prev, current := &net.layers[i - 1], &net.layers[i]
-        matmul(current.w, prev.a, current.z)
-        broadcast_add(current.z, current.b)
-        current.act_fn(current.z, current.a)
+        broadcast_add(current.z, current.b)   // z_l := b_l
+        matmul(current.w, prev.a, current.z)  // z_l += W_l a_(l-1)
+        current.act_fn(current.z, current.a)  // a_l := f_l(z_l)
     }
 
     return net.layers[i-1].a
