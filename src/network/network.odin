@@ -5,6 +5,8 @@ import "core:mem"
 import "core:math/rand"
 import mat "../mat"
 
+LOGGING :: #config(NN_LOGGING, false)
+
 SMat :: mat.SMat
 matmul :: mat.smat_matmul_blocking
 
@@ -65,7 +67,7 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
     assert(num_layers >= 2, "At least an input and output layer must be defined")
     net.x = mat.new_dyn_smat(layers[0].num_nodes, max_batch_size)
 
-    log.debugf("(Layer 0) Layer size: %d | X: %dx%d", net.x.rows, net.x.rows, net.x.cols)
+    when LOGGING do log.debugf("(Layer 0) Layer size: %d | X: %dx%d", net.x.rows, net.x.rows, net.x.cols)
 
     net.layers = make([dynamic]Layer, 0, num_layers - 1)
 
@@ -111,7 +113,7 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
 
         inputs, outputs := layers[i-1].num_nodes, layers[i].num_nodes
 
-        log.debugf("(Layer %d) Layer size: %d | Z: %dx%d | W: %dx%d | B: %dx%d | act: %v", i, outputs, outputs, 
+        when LOGGING do log.debugf("(Layer %d) Layer size: %d | Z: %dx%d | W: %dx%d | B: %dx%d | act: %v", i, outputs, outputs, 
             max_batch_size, outputs, inputs, outputs, 1, layers[i].activation_fun)
 
         w := mat.new_smat(outputs, inputs)
@@ -136,7 +138,7 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
     }
 
     net.temp = mat.new_dyn_smat(1, temp_size)
-    log.debugf("Temp matrix sized to %dx%d = %d", net.temp.rows, net.temp.cols, len(net.temp.data))
+    when LOGGING do log.debugf("Temp matrix sized to %dx%d = %d", net.temp.rows, net.temp.cols, len(net.temp.data))
 }
 
 destroy_network :: proc(net: ^Network) {
@@ -265,7 +267,7 @@ train_batch :: proc(net: ^Network, batch: Example, eta: f32) {
 
     batch_cost := net.cost_proc(net.layers[len(net.layers)-1].a, batch.output) / f64(batch.output.cols)
 
-    log.infof("Batch cost: %f", batch_cost)
+    when LOGGING do log.infof("Batch cost: %f", batch_cost)
 
     // Acculumate and apply gradients
     for &layer in net.layers {
