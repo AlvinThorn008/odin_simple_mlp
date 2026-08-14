@@ -39,6 +39,7 @@ diff_relu :: proc(mat, out: SMat) {
 }
 
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 softmax_batched :: proc(mat, out: SMat) {
     assert(smat.smat_same_size(mat, out), "size mismatch: softmax is an element-wise operation")
 
@@ -57,6 +58,7 @@ softmax_batched :: proc(mat, out: SMat) {
     }
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 softmax :: proc(mat, out: SMat) {
     assert(smat.smat_same_size(mat, out), "size mismatch: softmax is an element-wise operation")
     assert(mat.cols == 1, "inputs must be column vectors")
@@ -82,6 +84,7 @@ softmax :: proc(mat, out: SMat) {
     }
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 cross_entropy :: proc(a, b: SMat) -> f64 {
     assert(smat.smat_same_size(a, b), "size mismatch: matrices must be the same size")
 
@@ -96,6 +99,7 @@ cross_entropy :: proc(a, b: SMat) -> f64 {
     return sum
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 diff_cross_entropy :: proc(output, target, res: SMat) {
     assert(smat.smat_same_size(output, target) && smat.smat_same_size(target, res), "size mismatch: matrices must be the same size")
 
@@ -104,6 +108,7 @@ diff_cross_entropy :: proc(output, target, res: SMat) {
     }
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 squared_error :: proc(a, b: SMat) -> f64 {
     assert(smat.smat_same_size(a, b), "size mismatch: matrices must be the same size")
     sum: f64 = 0.0
@@ -114,6 +119,7 @@ squared_error :: proc(a, b: SMat) -> f64 {
     return sum
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 diff_squared_error :: proc(a, b, out: SMat) {
     assert(smat.smat_same_size(a, b), "size mismatch: matrices must be the same size")
     for i := 0; i < len(a.data); i += 1 {
@@ -121,6 +127,7 @@ diff_squared_error :: proc(a, b, out: SMat) {
     }
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 sigmoid :: proc(self, out: SMat) {
     assert(smat.smat_same_size(self, out), "size mismatch: matrices must be the same size")
     for i := 0; i < len(self.data); i += 1 {
@@ -128,6 +135,7 @@ sigmoid :: proc(self, out: SMat) {
     }
 }
 
+@(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
 diff_sigmoid :: proc(self, out: SMat) {
     assert(smat.smat_same_size(self, out), "size mismatch: matrices must be the same size")
     sig: f32
