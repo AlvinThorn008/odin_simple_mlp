@@ -90,7 +90,7 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
             case .SoftMax :
                 assert(i + 1 == num_layers && use_soft_cross, "currently, softmax is only supported in the output layer with cross entropy loss and Distribution output")
                 net.output_grad_proc = output_grad_cross_entropy
-                acts = { softmax_batched, softmax } // the derivative is not used in this case
+                acts = { softmax_batched2, softmax } // the derivative is not used in this case
             case .Null:
             case:
         }

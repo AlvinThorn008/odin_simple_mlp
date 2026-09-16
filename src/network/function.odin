@@ -45,37 +45,52 @@ diff_relu :: proc(mat, out: SMat) {
 }
 
 @(enable_target_feature="avx")
-exp_avx2 :: proc(x: f32x8) -> f32x8 {
+exp_best_avx2 :: proc(x: f32x8) -> f32x8 {
+    exp_hi :: f32x8(88.3762626647949)
+    exp_lo :: f32x8(-88.3762626647949)
+    cephes_LOG2EF :: f32x8(1.44269504088896341)
+    inv_LOG2EF :: f32x8(0.693147180559945)
+    
 
-    t, f, p, r: f32x8
-    i, j: i32x8
+    cephes_exp_p0 :: f32x8(1.9875691500E-4)
+    cephes_exp_p1 :: f32x8(1.3981999507E-3)
+    cephes_exp_p2 :: f32x8(8.3334519073E-3)
+    cephes_exp_p3 :: f32x8(4.1665795894E-2)
+    cephes_exp_p4 :: f32x8(1.6666665459E-1)
+    cephes_exp_p5 :: f32x8(5.0000001201E-1)
 
-    l2e := f32x8(1.442695041)
-    l2h := f32x8(-6.93145752e-1)
-    l2l := f32x8(-1.42860677e-6)
-    c0  := f32x8(0.041944388)
-    c1  := f32x8(0.168006673)
-    c2  := f32x8(0.499999940)
-    c3  := f32x8(0.999956906)
-    c4  := f32x8(0.999999642)
+    one :: f32x8(1.0)
 
-    t = simd.mul(x, l2e)
-    r = simd.nearest(t)
+    fx, y, z, pow2n: f32x8
+    imm0: i32x8
 
-    f = simd.fma(r, l2h, x)
-    f = simd.fma(r, l2l, f)
+    x := x
 
-    i = transmute(i32x8)x86._mm256_cvtps_epi32(t)
+    x = simd.min(x, exp_hi)
+    x = simd.max(x, exp_lo)
 
-    p = simd.fma(p, f, c1)
-    p = simd.fma(p, f, c2)
-    p = simd.fma(p, f, c3)
-    p = simd.fma(p, f, c4)
+    fx = simd.mul(x, cephes_LOG2EF)
+    // fx = x86._mm_round_ps(fx, 0x00)
+    fx = simd.nearest(fx)
+    z  = simd.mul(fx, inv_LOG2EF)
+    x  = simd.sub(x, z)
+    z  = simd.mul(x, x)
 
-    j = simd.shl(i, u32x8(23))
-    r = transmute(f32x8) simd.add(j, transmute(i32x8)p)
+    y  = simd.fma(cephes_exp_p0, x, cephes_exp_p1)
+    y  = simd.fma(y, x, cephes_exp_p2)
+    y  = simd.fma(y, x, cephes_exp_p3)
+    y  = simd.fma(y, x, cephes_exp_p4)
+    y  = simd.fma(y, x, cephes_exp_p5)
+    y  = simd.fma(y, z, x)
+    y  = simd.add(y, one)
 
-    return r
+    imm0 = transmute(i32x8)x86._mm256_cvttps_epi32(fx)
+    imm0 = simd.add(imm0, i32x8(0x7f))
+    imm0 = simd.shl(imm0, u32x8(23))
+
+    y = simd.mul(y, transmute(f32x8)imm0)
+
+    return y
 }
 
 @(fast_math={.Allow_Reassoc, .No_NaNs, .No_Infs, .No_Signed_Zeros})
@@ -88,6 +103,7 @@ softmax_batched2 :: proc(x, y: SMat) {
     maxes := make_aligned([]f32, cols, 32, context.temp_allocator)
     sums  := make_aligned([]f32, cols, 32, context.temp_allocator)
     copy(maxes[:], x.data[:cols]) // y(0, :) = x(0, :)
+    mem.zero_slice(sums)
     maxes8 := mem.slice_data_cast([]f32x8, maxes[:len8]) // []f32x8 view into y(0, :)
     sums8  := mem.slice_data_cast([]f32x8, sums[:len8])
 
@@ -106,19 +122,18 @@ softmax_batched2 :: proc(x, y: SMat) {
         }
     }
 
-
     for r in 0..<rows {
         row := ([^]f32x8)(raw_data(x.data[r*cols:]))[:num_vecs]
         y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]
         
         for b in 0..<num_vecs {
-            exps := exp_avx2(simd.sub(intrinsics.unaligned_load(&row[b]), maxes8[b]))
+            exps := exp_best_avx2(simd.sub(intrinsics.unaligned_load(&row[b]), maxes8[b]))
             intrinsics.unaligned_store(&y_row[b], exps)
             sums8[b] = simd.add(exps, sums8[b])
         }
 
         if rem != 0 {
-            exps := exp_avx2(simd.sub(
+            exps := exp_best_avx2(simd.sub(
                 simd.masked_load(&x.data[r*cols + len8], zero, mask),
                 simd.masked_load(&maxes[len8], zero, mask)
             ))
@@ -131,20 +146,20 @@ softmax_batched2 :: proc(x, y: SMat) {
             )
         }
     }
-
+    
     for r in 0..<rows {
-        row := ([^]f32x8)(raw_data(x.data[r*cols:]))[:num_vecs]
-        y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]
+        y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]     
 
         for b in 0..<num_vecs do intrinsics.unaligned_store(
             &y_row[b],
-            simd.div(intrinsics.unaligned_load(&row[b]), sums8[b])
+            simd.div(intrinsics.unaligned_load(&y_row[b]), sums8[b])
         )
 
         for i in len8..<cols {
-            y.data[r*cols + i] = x.data[r*cols + i] / sums[i]
+            y.data[r*cols + i] = y.data[r*cols + i] / sums[i]
         }
-    }  
+    }   
+
 }
 
 
