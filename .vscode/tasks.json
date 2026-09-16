@@ -8,6 +8,12 @@
             "type": "shell",
             "command": "make build MODE=debug",
             "group": "build"
+        },
+        {
+            "label": "build exp",
+            "type": "shell",
+            "command": "odin build examples/exp.odin -file -debug -out:build/exp.exe",
+            "group": "build"
         }
     ]
 }

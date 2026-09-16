@@ -4,11 +4,20 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug",
+            "name": "Debug neural_net",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/build/neural_net_dbg.exe",
             "args": [],
             "cwd": "${workspaceFolder}"
-        }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug exp",
+            "preLaunchTask": "build exp",
+            "program": "${workspaceFolder}/build/exp.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
     ]
 }
