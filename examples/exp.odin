@@ -1,5 +1,6 @@
 package exp_avx2
 
+import "core:slice"
 import "base:intrinsics"
 import "core:fmt"
 import "core:math/rand"
@@ -16,20 +17,26 @@ u16x8 :: simd.u16x8
 SMat  :: mat.SMat
 
 main :: proc() {
-    x: [500]f32
-    for i in 0..<50 do x[i] = rand.float32_range(-25.0, 40.0)
+    // x: [500]f32
+    // for i in 0..<50 do x[i] = rand.float32_range(-25.0, 40.0)
 
-    for i in 0..<50 {
-        target := math.exp_f32(x[i])
-        approx := simd.extract(exp_avx2(x[i]), 0)
-        approx2 := simd.extract(exp_best_avx2(x[i]), 0)
+    // for i in 0..<50 {
+    //     target := math.exp_f32(x[i])
+    //     approx := simd.extract(exp_avx2(x[i]), 0)
+    //     approx2 := simd.extract(exp_best_avx2(x[i]), 0)
 
-        rel_tol := math.abs(target - approx) / min(math.abs(target), math.abs(approx))
-        rel_tol2 := math.abs(target - approx2) / min(math.abs(target), math.abs(approx2))
-        fmt.printfln("x = %13e   y = %13e   y1 = %13e   y2 = %13e   rel_err1 = %13e   rel_err2 = %13e", x[i], target, approx, approx2, rel_tol, rel_tol2)
-    } 
+    //     rel_tol := math.abs(target - approx) / min(math.abs(target), math.abs(approx))
+    //     rel_tol2 := math.abs(target - approx2) / min(math.abs(target), math.abs(approx2))
+    //     fmt.printfln("x = %13e   y = %13e   y1 = %13e   y2 = %13e   rel_err1 = %13e   rel_err2 = %13e", x[i], target, approx, approx2, rel_tol, rel_tol2)
+    // }
+    
+    x, y := mat.new_smat(33, 33), mat.new_smat(33, 33)
+    for &v, i in x.data[5*33:][:33] do v = f32(i)
+
+    softmax(x, y)
 }
 
+// Has no input range clamp
 @(enable_target_feature="avx")
 exp_avx2 :: proc(x: f32x8) -> f32x8 {
 
@@ -53,6 +60,7 @@ exp_avx2 :: proc(x: f32x8) -> f32x8 {
 
     i = transmute(i32x8)x86._mm256_cvtps_epi32(t)
 
+    p = c0
     p = simd.fma(p, f, c1)
     p = simd.fma(p, f, c2)
     p = simd.fma(p, f, c3)
@@ -122,6 +130,7 @@ softmax :: proc(x, y: SMat) {
     maxes := make_aligned([]f32, cols, 32, context.temp_allocator)
     sums  := make_aligned([]f32, cols, 32, context.temp_allocator)
     copy(maxes[:], x.data[:cols]) // y(0, :) = x(0, :)
+    mem.zero_slice(sums)
     maxes8 := mem.slice_data_cast([]f32x8, maxes[:len8]) // []f32x8 view into y(0, :)
     sums8  := mem.slice_data_cast([]f32x8, sums[:len8])
 
@@ -140,19 +149,21 @@ softmax :: proc(x, y: SMat) {
         }
     }
 
+    fmt.println(maxes)
+
 
     for r in 0..<rows {
         row := ([^]f32x8)(raw_data(x.data[r*cols:]))[:num_vecs]
         y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]
         
         for b in 0..<num_vecs {
-            exps := exp_avx2(simd.sub(intrinsics.unaligned_load(&row[b]), maxes8[b]))
+            exps := exp_best_avx2(simd.sub(intrinsics.unaligned_load(&row[b]), maxes8[b]))
             intrinsics.unaligned_store(&y_row[b], exps)
             sums8[b] = simd.add(exps, sums8[b])
         }
 
         if rem != 0 {
-            exps := exp_avx2(simd.sub(
+            exps := exp_best_avx2(simd.sub(
                 simd.masked_load(&x.data[r*cols + len8], zero, mask),
                 simd.masked_load(&maxes[len8], zero, mask)
             ))
@@ -166,19 +177,58 @@ softmax :: proc(x, y: SMat) {
         }
     }
 
+    /*DEBUG*/
+    fmt.println(sums)
+    lowest, highest, mean: f32
+    matches: int
     for r in 0..<rows {
-        row := ([^]f32x8)(raw_data(x.data[r*cols:]))[:num_vecs]
-        y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]
+        for c in 0..<cols {
+            gre := maxes[c]
+            a := y.data[r*cols + c] 
+            b := math.exp(x.data[r*cols + c] - gre)
+
+            diff := math.abs(a - b)
+            mag := max(math.abs(a), math.abs(b))
+
+            rel_err := diff / mag
+            lowest, highest = min(lowest, rel_err), max(highest, rel_err)
+            mean += rel_err
+
+            if rel_err < 0.01 {
+                matches += 1
+            } else {
+                fmt.printf("%v -> %v | ", a, b)
+            }
+        }
+    }
+    mean /= f32(rows * cols)
+    fmt.printfln("Lowest: %f\nHighest: %f\nMean: %f\nMatches: %v/%v", lowest, highest, mean, matches, rows * cols)
+    /*END DEBUG*/
+    
+    for r in 0..<rows {
+        y_row := ([^]f32x8)(raw_data(y.data[r*cols:]))[:num_vecs]     
 
         for b in 0..<num_vecs do intrinsics.unaligned_store(
             &y_row[b],
-            simd.div(intrinsics.unaligned_load(&row[b]), sums8[b])
+            simd.div(intrinsics.unaligned_load(&y_row[b]), sums8[b])
         )
 
         for i in len8..<cols {
-            y.data[r*cols + i] = x.data[r*cols + i] / sums[i]
+            y.data[r*cols + i] = y.data[r*cols + i] / sums[i]
         }
-    }  
+    }
+
+    /*DEBUG*/
+    sums2 := make_aligned([]f32, cols, 32, context.temp_allocator)
+    for r in 0..<rows {
+        for c in 0..<cols {
+            sums2[c] += y.data[r*cols+c]
+        }
+    }
+
+    fmt.println(sums2)
+    /*END DEBUG*/
+
 }
 
 /*
