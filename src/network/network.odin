@@ -121,7 +121,6 @@ create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, 
 
         // He initialization
         for &val in w.data do val = rand.float32_normal(0.0, 2.0/f32(inputs))
-        for &val in b.data do val = rand.float32_normal(0.0, 2.0/f32(inputs))
 
         append(&net.layers, Layer {
             w = w,
@@ -173,6 +172,7 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
     mat.copy_smat_to(input, net.x)
     // TODO: perhaps a "broadcast_copy" might be a better
     // mat.copy_smat_to(net.layers[0].b, net.layers[0].z)
+    mem.zero_slice(net.layers[0].z.data)
     broadcast_add(net.layers[0].z, net.layers[0].b)
     matmul(net.layers[0].w, input, net.layers[0].z)
     net.layers[0].act_fn(net.layers[0].z, net.layers[0].a)
@@ -180,6 +180,7 @@ forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
     i: int
     for i = 1; i < len(net.layers); i += 1 {
         prev, current := &net.layers[i - 1], &net.layers[i]
+        mem.zero_slice(current.z.data)
         broadcast_add(current.z, current.b)   // z_l := b_l
         matmul(current.w, prev.a, current.z)  // z_l += W_l a_(l-1)
         current.act_fn(current.z, current.a)  // a_l := f_l(z_l)
@@ -258,7 +259,7 @@ train :: proc(net: ^Network, dataset: []Example, eta: f32, batch_size, epochs: u
     
 }
 
-train_batch :: proc(net: ^Network, batch: Example, eta: f32) {
+train_batch :: proc(net: ^Network, batch: Example, eta: f32) -> f64 {
     
     scale := eta / f32(batch.input.cols)
     
@@ -280,6 +281,8 @@ train_batch :: proc(net: ^Network, batch: Example, eta: f32) {
         mat.smat_scale(layer.acc_dw, scale)
         mat.smat_sub(layer.w, layer.acc_dw)
     }
+
+    return batch_cost
 }
 
 clear_accumulators :: proc(net: ^Network) {
