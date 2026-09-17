@@ -158,7 +158,9 @@ softmax_batched2 :: proc(x, y: SMat) {
         for i in len8..<cols {
             y.data[r*cols + i] = y.data[r*cols + i] / sums[i]
         }
-    }   
+    }
+    
+    free_all(context.temp_allocator)
 
 }
 
@@ -277,6 +279,42 @@ argmax :: proc(mat: SMat) -> uint {
     for val, i in mat.data {
         if val >= max_val { max_val = val; max_idx = uint(i) } 
     }
-    return max_idx
+    return max_idx 
+}
+
+argmax_batched :: proc(mat: SMat, out: []u32) {
+    assert(uint(len(out)) == mat.cols, "size mismatch: `out` must have one element per column")
+    assert(mem.is_aligned(raw_data(out), 32), "`out` must be aligned")
+
+    rows, cols := mat.rows, mat.cols
+    num_vecs, len8 := cols >> 3, cols & ~uint(7)
+
+    max_vals := make_aligned([]f32, cols, 32, context.temp_allocator)
+    out_vec := ([^]u32x8)(raw_data(out))[:num_vecs]
+    max_vals_vec := ([^]f32x8)(raw_data(max_vals))[:num_vecs]
+    
+    copy(max_vals, mat.data[:cols])
+    mem.zero_slice(out)
+    
+    for r in 1..<rows {
+        row := ([^]f32x8)(raw_data(mat.data[r*cols:]))[:num_vecs]
+
+        for b in 0..<num_vecs {
+            a := intrinsics.unaligned_load(&row[b])
+            max_val := max_vals_vec[b]
+            mask := simd.lanes_ge(a, max_val)
+            max_vals_vec[b] = simd.select(mask, a, max_val)
+            out_vec[b] = simd.select(mask, u32x8(r), out_vec[b])
+        }
+
+        for i in len8..<cols {
+            a, max_val := mat.data[r*cols + i], max_vals[i]
+            sel := a >= max_val
+            max_vals[i] = sel ? a : max_val
+            if sel do out[i] = u32(r)
+        }
+    }
+
+    free_all(context.temp_allocator)
 }
 
