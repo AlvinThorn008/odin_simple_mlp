@@ -9,6 +9,7 @@ import "core:simd"
 import "core:simd/x86"
 import "core:mem"
 import mat "../src/mat"
+import nn "../src/network"
 
 f32x8 :: simd.f32x8
 i32x8 :: simd.i32x8
@@ -17,6 +18,9 @@ u16x8 :: simd.u16x8
 SMat  :: mat.SMat
 
 main :: proc() {
+    // Enable matrix formatting
+    fmt.set_user_formatters(new(map[typeid]fmt.User_Formatter))
+    fmt.register_user_formatter(SMat, mat.Matrix_Formatter)
     // x: [500]f32
     // for i in 0..<50 do x[i] = rand.float32_range(-25.0, 40.0)
 
@@ -30,10 +34,22 @@ main :: proc() {
     //     fmt.printfln("x = %13e   y = %13e   y1 = %13e   y2 = %13e   rel_err1 = %13e   rel_err2 = %13e", x[i], target, approx, approx2, rel_tol, rel_tol2)
     // }
     
-    x, y := mat.new_smat(33, 33), mat.new_smat(33, 33)
-    for &v, i in x.data[5*33:][:33] do v = f32(i)
+    // x, y := mat.new_smat(33, 33), mat.new_smat(33, 33)
+    // for &v, i in x.data[5*33:][:33] do v = f32(i)
 
-    softmax(x, y)
+    // softmax(x, y)
+
+    a := mat.new_smat(10, 4)
+    a.data[0] = 1
+    a.data[1+4] = 2
+    a.data[2+8] = 3
+    a.data[3+12] = 4
+
+    v := make_aligned([]u32, 4, 32)
+
+    nn.argmax_batched(a, v)
+
+    fmt.printfln("%#v\n%#v", a, v)
 }
 
 // Has no input range clamp
