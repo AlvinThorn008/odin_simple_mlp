@@ -1,5 +1,8 @@
 package network
 
+import "core:slice"
+import "core:math"
+import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:math/rand"
@@ -260,8 +263,47 @@ current_batch_size :: proc(net: ^Network) -> uint {
 // A training example for the network
 Example :: struct { input: SMat, output: SMat }
 
-train :: proc(net: ^Network, dataset: []Example, eta: f32, batch_size, epochs: uint) {
+TrainOptions :: struct {
+    eta: f32,
+    log_rate: u32,
+    batch_proc: Maybe(proc(^Network, ^TrainOptions, f64) -> bool),
+    epoch_proc: Maybe(proc(^Network, ^TrainOptions, uint) -> bool),
+    user_data: rawptr,
+    user_bytes: []u8
+}
+
+train :: proc(net: ^Network, batches: []Example, dataset_size, batch_size, epochs: uint, opts: TrainOptions) {
+    rem_batch_size := dataset_size % batch_size
+    resize_matrices(net, batch_size)
+
+    opts := opts // local copy for mutation
+
+    full_batches := rem_batch_size == 0 ? batches : batches[:len(batches)-1]
     
+    for i in 0..<epochs {
+        max_cost, min_cost, avg_cost: f64 = 0.0, math.INF_F64, 0.0
+        for batch in full_batches {
+            clear_accumulators(net)
+            last_batch_cost := train_batch(net, batch, opts.eta)
+            max_cost = max(max_cost, last_batch_cost)
+            min_cost = min(min_cost, last_batch_cost)
+            avg_cost += last_batch_cost
+            if func, ok := opts.batch_proc.?; ok do func(net, &opts, last_batch_cost)
+        }
+        if rem_batch_size != 0 {
+            old_size := current_batch_size(net)
+            resize_matrices(net, rem_batch_size)
+            clear_accumulators(net)
+            last_batch_cost := train_batch(net, slice.last(batches), opts.eta)
+            resize_matrices(net, old_size)
+            max_cost = max(max_cost, last_batch_cost)
+            min_cost = min(min_cost, last_batch_cost)
+            avg_cost += last_batch_cost
+            if func, ok := opts.batch_proc.?; ok do func(net, &opts, last_batch_cost)
+        }
+        if i % uint(opts.log_rate) == 0 do fmt.printfln("Epoch %v [Min=%f, Max=%f, Avg=%f]", i, min_cost, max_cost, avg_cost / f64(len(batches)))
+        if func, ok := opts.epoch_proc.?; ok do func(net, &opts, i)
+    }
 }
 
 train_batch :: proc(net: ^Network, batch: Example, eta: f32) -> f64 {
