@@ -64,6 +64,7 @@ Network :: struct {
 
 create_network :: proc(net: ^Network, cost_fn: CostFn, output_type: OutputType, max_batch_size: uint, layers: ..LayerDef) {
     num_layers := len(layers)
+    net.max_batch_size = max_batch_size
     assert(num_layers >= 2, "At least an input and output layer must be defined")
     net.x = mat.new_dyn_smat(layers[0].num_nodes, max_batch_size)
 
@@ -153,8 +154,9 @@ This operation cannot grow the backing buffers of the network's matrices and thu
 
 if `batch_size` exceeds `net.max_batch_size`, the procedure does nothing and returns false
 */
-resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
-    if batch_size > net.max_batch_size do return false
+resize_matrices :: proc(net: ^Network, batch_size: uint) {
+    assert(batch_size <= net.max_batch_size, "resize_matrices: new batch_size cannot exceed max_batch_size")
+    if current_batch_size(net) == batch_size do return
 
     mat.reshape(&net.x, net.x.rows, batch_size)
 
@@ -163,8 +165,6 @@ resize_matrices :: proc(net: ^Network, batch_size: uint) -> bool {
         mat.reshape(&layer.a, layer.a.rows, batch_size)
         mat.reshape(&layer.db, layer.db.rows, batch_size)
     }
-
-    return true
 }
 
 forward_prop :: proc(net: ^Network, input: SMat) -> SMat {
