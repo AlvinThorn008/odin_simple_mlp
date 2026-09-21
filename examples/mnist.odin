@@ -1,5 +1,7 @@
 package mnist
 
+import "core:mem"
+import "core:image"
 import "core:slice"
 import "core:os"
 import "core:fmt"
@@ -7,6 +9,7 @@ import "core:log"
 import "core:terminal/ansi"
 import "core:strings"
 import "core:sys/windows"
+import "core:image/bmp"
 import nn "../src/network"
 import mat "../src/mat"
 
@@ -17,7 +20,8 @@ SMat     :: mat.SMat
 BATCH_SIZE :: u32(400)
 EPOCHS     :: 1000
 ETA        :: 0.03
-EVAL_EPOCH :: 50
+LOG_EPOCH  :: 25
+EVAL_EPOCH :: 100
 
 main :: proc() {
     when ODIN_OS == .Windows { // Make terminal display stdout as utf8
@@ -49,43 +53,90 @@ main :: proc() {
 
     // Parse training data and testing data
     images, labels, num_images, image_rows, image_cols := read_dataset("resources/train-images.idx3-ubyte", "resources/train-labels.idx1-ubyte")
-    test_images, test_labels, test_num_images := read_dataset("resources/t10k-images.idx3-ubyte", "resources/t10k-labels.idx1-ubyte")
+    test_images, test_labels, test_num_images, _, _ := read_dataset("resources/t10k-images.idx3-ubyte", "resources/t10k-labels.idx1-ubyte")
 
-    test_data := make_example(test_images, test_labels, uint(image_rows*image_cols), 0, BATCH_SIZE)
+    test_data := make_example(test_images, test_labels, image_rows*image_cols, 0, BATCH_SIZE)
 
     num_examples := (num_images + BATCH_SIZE - 1)/BATCH_SIZE
     num_examples_full := num_images / BATCH_SIZE
+
+    print_image(test_data.input, 0, 28, 28)
 
     // Build training batches
     batches := make([dynamic]Example, 0, num_examples)
     {
         i: u32 = 0
         for ; i < num_examples_full; i += 1 {
-            append(&batches, make_example(images, labels, uint(image_rows*image_cols), uint(i*BATCH_SIZE), uint(BATCH_SIZE)))
+            append(&batches, make_example(images, labels, image_rows*image_cols, i*BATCH_SIZE, BATCH_SIZE))
         }
         // Remainder batch
         if num_examples != num_examples_full {
-            append(&batches, make_example(images, labels, uint(image_rows*image_cols), uint(i*BATCH_SIZE), uint(num_images % BATCH_SIZE)))
+            append(&batches, make_example(images, labels, image_rows*image_cols, i*BATCH_SIZE, num_images % BATCH_SIZE))
         }
     }
 
+    prediction := make_aligned([]u32, BATCH_SIZE, 32)
+    actual := make_aligned([]u32, BATCH_SIZE, 32)
 
-    // SGD training loop
-    last_batch_cost := f64(1000.0)
-    for i in 0..<EPOCHS {
-        max_cost, min_cost, avg_cost: f64 = 0.0, 10000000000.0, 0.0
-        for batch in batches {
-            nn.clear_accumulators(net)
-            last_batch_cost = nn.train_batch(net, batch, ETA)
-            max_cost = max(max_cost, last_batch_cost)
-            min_cost = min(min_cost, last_batch_cost)
-            avg_cost += last_batch_cost
-        }
-        fmt.printfln("Epoch %v [Min=%f, Max=%f, Avg=%f]", i, min_cost, max_cost, avg_cost / f64(len(batches)))
-        if (i + 1) % EVAL_EPOCH == 0 {
-            output := nn.forward_prop(net, test_data.input)
+    nn.train(net, batches[:], uint(num_images), uint(BATCH_SIZE), EPOCHS, {
+        eta = ETA,
+        log_rate = LOG_EPOCH
+    })
+
+    pass, total := evaluate_model(net, test_images, test_labels, image_rows*image_cols)
+    fmt.printfln("Evaluation: %i/%i (%f%%)", pass, total, f64(pass)/f64(total) * 100.0)
+
+    digits_paths, err := os.read_all_directory_by_path("resources/handwritten/", context.allocator)
+    defer delete(digits_paths)
+    my_images := make([dynamic]u8, 0, len(digits_paths)*784*3)
+    my_labels := make([dynamic]u8, 0, len(digits_paths))
+    for path in digits_paths {
+        digit := path.name[0] - '0'
+
+        img, err := bmp.load(path.fullpath)
+        defer image.destroy(img)
+        assert(len(img.pixels.buf) == 784*3, "Should be a 28x28 image")
+
+        append(&my_labels, digit)
+        pixels := mem.slice_data_cast([]image.RGB_Pixel, img.pixels.buf[:])
+        for pixel in pixels {
+            append(&my_images, 255 - pixel.r)
         }
     }
+    my_test_data := make_example(my_images[:], my_labels[:], 28*28, 0, u32(len(digits_paths)))
+    // for i in 0..<uint(9) do print_image(my_test_data.input, i, 28, 28)
+
+    nn.resize_matrices(net, 9)
+    n, d := evaluate_model(net, my_images[:], my_labels[:], 28*28)
+    fmt.printfln("Evaluation: %i/%i (%f%%)", n, d, f64(n)/f64(d) * 100.0)
+
+}
+
+evaluate_model :: proc(net: ^nn.Network, test_images: []u8, test_labels: []u8, image_size: u32) -> (pass: u32, total: u32) {
+    num_labels := u32(len(test_labels))
+    batch_size := u32(nn.current_batch_size(net))
+    prediction := make_aligned([]u32, batch_size, 32)
+    actual := make_aligned([]u32, batch_size, 32)
+
+    i: u32 = 0
+    is_rem_batch := false
+    for ; i < num_labels; i += batch_size {
+        is_rem_batch = i + batch_size - 1 < num_labels
+        example_size := is_rem_batch ? batch_size : num_labels - i
+
+        example := make_example(test_images, test_labels, image_size, i, example_size)
+
+        if is_rem_batch do nn.resize_matrices(net, uint(example_size))
+        output := nn.forward_prop(net, example.input)
+        nn.argmax_batched(output, prediction[:example_size])
+        nn.argmax_batched(example.output, actual[:example_size])
+        
+        total += example_size
+        for i in 0..<example_size do if prediction[i] == actual[i] do pass += 1
+    }
+    if is_rem_batch do nn.resize_matrices(net, uint(batch_size))
+
+    return
 }
 
 read_dataset :: proc(images_path: string, labels_path: string) -> (images, labels: []u8, num_images, image_rows, image_cols: u32) {
@@ -113,16 +164,16 @@ read_dataset :: proc(images_path: string, labels_path: string) -> (images, label
     return   
 }
 
-make_example :: proc(images: []u8, labels: []u8, image_size, start, length: uint) -> Example {
-    input := mat.new_smat(image_size, length)
-    output := mat.new_smat(10, length)
+make_example :: proc(images: []u8, labels: []u8, image_size, start, length: u32) -> Example {
+    input := mat.new_smat(uint(image_size), uint(length))
+    output := mat.new_smat(10, uint(length))
 
     // Populate input matrix - each column is an image(28x28)
     // Populate output matrix - one-hot column for each label
     for i in start..<start+length {
-        output.data[uint(labels[i]) * length + (i - start)] = 1.0
+        output.data[u32(labels[i]) * length + (i - start)] = 1.0
         for pixel, idx in images[i*image_size:][:image_size] {
-            input.data[uint(idx) * length + (i - start)] = f32(pixel) / 255.0
+            input.data[u32(idx) * length + (i - start)] = f32(pixel) / 255.0
         }
     }
 
