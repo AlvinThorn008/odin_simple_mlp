@@ -307,7 +307,6 @@ train :: proc(net: ^Network, batches: []Example, dataset_size, batch_size, epoch
 }
 
 train_batch :: proc(net: ^Network, batch: Example, eta: f32) -> f64 {
-    
     scale := eta / f32(batch.input.cols)
     
     forward_prop(net, batch.input)
@@ -337,4 +336,8 @@ clear_accumulators :: proc(net: ^Network) {
         mem.zero_slice(layer.acc_db.data)
         mem.zero_slice(layer.acc_dw.data)
     }
+}
+
+save :: proc(net: ^Network, path: string) {
+
 }
