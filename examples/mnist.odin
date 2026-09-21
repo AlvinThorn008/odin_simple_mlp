@@ -60,7 +60,7 @@ main :: proc() {
     num_examples := (num_images + BATCH_SIZE - 1)/BATCH_SIZE
     num_examples_full := num_images / BATCH_SIZE
 
-    print_image(test_data.input, 0, 28, 28)
+    // print_image(test_data.input, 0, 28, 28)
 
     // Build training batches
     batches := make([dynamic]Example, 0, num_examples)
