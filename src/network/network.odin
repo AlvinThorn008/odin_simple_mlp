@@ -252,6 +252,11 @@ output_grad :: proc(net: ^Network, target, grad: SMat) {
     mat.smat_mul(grad, last_layer.z)
 }
 
+// Returns the batch size the network's matrices are currently configured for
+current_batch_size :: proc(net: ^Network) -> uint {
+    return net.x.cols
+}
+
 // A training example for the network
 Example :: struct { input: SMat, output: SMat }
 
